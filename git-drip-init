@@ -1,0 +1,190 @@
+#!/bin/sh
+# vim:et:ft=sh:sts=4:sw=4
+
+usage() {
+    echo "usage: git drip init [-fd]"
+}
+
+parse_args() {
+    # parse options
+    FLAGS "$@" || exit $?
+    eval set -- "${FLAGS_ARGV}"
+}
+
+# Default entry when no SUBACTION is given
+cmd_default() {
+    DEFINE_boolean force false 'force setting of gitdrip branches, even if already configured' f
+    DEFINE_boolean defaults false 'use default branch naming conventions' d
+    parse_args "$@"
+
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+        git init
+    else
+        # assure that we are not working in a repo with local changes
+        git_repo_is_headless || require_clean_working_tree
+    fi
+
+    # check if initialized for gitflow
+    if gitflow_is_initialized; then
+        error "Already initialized for gitflow"
+    fi
+
+    # running git drip init on an already initialized repo is fine
+    if gitdrip_is_initialized && ! flag force; then
+        msg "Already initialized for gitdrip."
+        msg "To force reinitialization, use: git drip init -f"
+        exit 0
+    fi
+
+    local branch_count
+    local answer
+
+    if flag defaults; then
+        msg "Using default branch names."
+    fi
+
+    # add a master branch if no such branch exists yet
+    local master_branch
+    if gitdrip_has_master_configured && ! flag force; then
+        master_branch=$(git config --get gitdrip.branch.master)
+    else
+        # Two cases are distinguished:
+        # 1. A fresh git repo (without any branches)
+        #    We will configure repo for user
+        # 2. Some branches do already exist
+        #    We will disallow creation of new branches and
+        #    rather allow to use existing branches for git-drip.
+        local default_suggestion
+        local should_check_existence
+        branch_count=$(git_local_branches | wc -l)
+        if [ "$branch_count" -eq 0 ]; then
+            echo "No branches exist yet. Base branches must be created now."
+            should_check_existence=false
+            default_suggestion=$(git config --get gitdrip.branch.master || echo master)
+        else
+            echo
+            echo "Which branch should be used for development?"
+            git_local_branches | sed 's/^.*$/   - &/g'
+
+            should_check_existence=true
+            default_suggestion=
+            for guess in $(git config --get gitdrip.branch.master) 'master'; do
+                if git_local_branch_exists "$guess"; then
+                    default_suggestion="$guess"
+                    break
+                fi
+            done
+        fi
+
+        printf "Branch name for development: [$default_suggestion] "
+        if noflag defaults; then
+            read answer
+        else
+            printf "\n"
+        fi
+        master_branch=${answer:-$default_suggestion}
+
+        # check existence in case of an already existing repo
+        if [ $should_check_existence = true ]; then
+            git_local_branch_exists "$master_branch" || \
+                error "Local branch '$master_branch' does not exist."
+        fi
+
+        # store the name of the master branch
+        git config gitdrip.branch.master "$master_branch"
+    fi
+
+    # Creation of HEAD
+    # ----------------
+    # We create a HEAD now, if it does not exist yet (in a fresh repo). We need
+    # it to be able to create new branches.
+    local created_gitdrip_branch=0
+    if ! git rev-parse --quiet --verify HEAD >/dev/null 2>&1; then
+        git symbolic-ref HEAD "refs/heads/$master_branch"
+        git commit --allow-empty --quiet -m "Initial commit"
+        created_gitdrip_branch=1
+    fi
+
+    # Creation of master
+    # ------------------
+    # At this point, there always is a master branch: either it existed already
+    # (and was picked interactively as the production branch) or it has just
+    # been created in a fresh repo
+
+    # assert the gitdrip repo has been correctly initialized
+    gitdrip_is_initialized
+
+    # switch to development branch if its newly created
+    if [ $created_gitdrip_branch -eq 1 ]; then
+        git checkout -q "$master_branch"
+    fi
+
+    # finally, ask the user for naming conventions (branch and tag prefixes)
+    if flag force || \
+        ! git config --get gitdrip.prefix.feature >/dev/null 2>&1 || \
+        ! git config --get gitdrip.prefix.release >/dev/null 2>&1 || \
+        ! git config --get gitdrip.prefix.hotfix >/dev/null 2>&1 || \
+        ! git config --get gitdrip.prefix.versiontag >/dev/null 2>&1; then
+        echo
+        echo "How to name your supporting branch prefixes?"
+    fi
+
+    local prefix
+
+    # Feature branches
+    if ! git config --get gitdrip.prefix.feature >/dev/null 2>&1 || flag force; then
+        default_suggestion=$(git config --get gitdrip.prefix.feature || echo feature/)
+        printf "Feature branches? [$default_suggestion] "
+        if noflag defaults; then
+            read answer
+        else
+            printf "\n"
+        fi
+        [ "$answer" = "-" ] && prefix= || prefix=${answer:-$default_suggestion}
+        git config gitdrip.prefix.feature "$prefix"
+    fi
+
+    # Release branches
+    if ! git config --get gitdrip.prefix.release >/dev/null 2>&1 || flag force; then
+        default_suggestion=$(git config --get gitdrip.prefix.release || echo release/)
+        printf "Release branches? [$default_suggestion] "
+        if noflag defaults; then
+            read answer
+        else
+            printf "\n"
+        fi
+        [ "$answer" = "-" ] && prefix= || prefix=${answer:-$default_suggestion}
+        git config gitdrip.prefix.release "$prefix"
+    fi
+
+    # Hotfix branches
+    if ! git config --get gitdrip.prefix.hotfix >/dev/null 2>&1 || flag force; then
+        default_suggestion=$(git config --get gitdrip.prefix.hotfix || echo hotfix/)
+        printf "Hotfix branches? [$default_suggestion] "
+        if noflag defaults; then
+            read answer
+        else
+            printf "\n"
+        fi
+        [ "$answer" = "-" ] && prefix= || prefix=${answer:-$default_suggestion}
+        git config gitdrip.prefix.hotfix "$prefix"
+    fi
+
+    # Version tag prefix
+    if ! git config --get gitdrip.prefix.versiontag >/dev/null 2>&1 || flag force; then
+        default_suggestion=$(git config --get gitdrip.prefix.versiontag || echo "")
+        printf "Version tag prefix? [$default_suggestion] "
+        if noflag defaults; then
+            read answer
+        else
+            printf "\n"
+        fi
+        [ "$answer" = "-" ] && prefix= || prefix=${answer:-$default_suggestion}
+        git config gitdrip.prefix.versiontag "$prefix"
+    fi
+
+    echo ""
+    success "git drip has been initialized"
+}
+
+cmd_help() { usage; exit 0; }

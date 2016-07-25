@@ -1,0 +1,17 @@
+#!/bin/sh
+# vim:et:ft=sh:sts=4:sw=4
+
+GITDRIP_VERSION=0.1.0
+
+usage() {
+    echo "usage: git drip version"
+}
+
+cmd_default() {
+    echo "$GITDRIP_VERSION"
+}
+
+cmd_help() {
+    usage
+    exit 0
+}
