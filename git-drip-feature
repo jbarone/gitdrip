@@ -9,7 +9,7 @@ PREFIX=$(git config --get gitdrip.prefix.feature)
 usage() {
     echo "usage: git drip feature [list] [-v]"
     echo "       git drip feature start [-F] <name> [<base>]"
-    echo "       git drip feature finish [-mFks] <name|nameprefix>"
+    echo "       git drip feature finish [-rFks] <name|nameprefix>"
     echo "       git drip feature publish <name>"
     echo "       git drip feature track <name>"
     echo "       git drip feature diff [<name|nameprefix>]"
@@ -194,7 +194,7 @@ cmd_start() {
 
 cmd_finish() {
     DEFINE_boolean fetch false "fetch from $ORIGIN before performing finish" F
-    DEFINE_boolean merge false "merge instead of rebase" m
+    DEFINE_boolean rebase false "rebase instead of merge" r
     DEFINE_boolean keep false "keep branch after performing finish" k
     DEFINE_boolean squash false "squash feature while performing merge" S
     parse_args "$@"
@@ -252,7 +252,7 @@ cmd_finish() {
     fi
 
     # if the user wants to merge, do that first
-    if ! flag merge; then
+    if flag rebase; then
         if ! git drip feature rebase "$NAME" "$MASTER_BRANCH"; then
             msg "Finish was aborted due to conflicts during rebase."
             msg "Please finish the rebase manually now."
@@ -267,7 +267,7 @@ cmd_finish() {
     if flag squash; then
         git merge --squash "$BRANCH"
     else
-        git merge --ff "$BRANCH"
+        git merge "$BRANCH"
     fi
 
     if [ $? -ne 0 ]; then

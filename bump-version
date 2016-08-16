@@ -1,0 +1,18 @@
+#!/bin/sh
+# vim:et:ft=sh:sts=4:sw=4
+usage() {
+	echo "usage: bump-version <version-id>"
+}
+
+if [ $# -ne 1 ]; then
+	usage
+	exit 1
+fi
+
+if ! sed -i 's/^GITFLOW_VERSION=.*$/GITFLOW_VERSION='$1'/g' git-flow-version; then
+	echo "Could not replace GITFLOW_VERSION variable." >&2
+	exit 2
+fi
+
+git add git-flow-version
+git commit -m "Bumped version number to $1" git-flow-version
