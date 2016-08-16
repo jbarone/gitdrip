@@ -10,6 +10,7 @@ usage() {
     echo "usage: git drip feature [list] [-v]"
     echo "       git drip feature start [-F] <name> [<base>]"
     echo "       git drip feature finish [-rFks] <name|nameprefix>"
+    echo "       git drip feature delete [-F] <name>"
     echo "       git drip feature publish <name>"
     echo "       git drip feature track <name>"
     echo "       git drip feature diff [<name|nameprefix>]"
@@ -192,6 +193,37 @@ cmd_start() {
     echo
 }
 
+cmd_delete() {
+    DEFINE_boolean fetch false "fetch from $ORIGIN before performing finish" F
+    parse_args "$@"
+    expand_nameprefix_arg
+
+    # sanity checks
+    require_branch "$BRANCH"
+
+    # sanity checks
+    require_clean_working_tree
+
+    if has "$ORIGIN/$MASTER_BRANCH" "$(git_remote_branches)"; then
+        require_branches_equal "$MASTER_BRANCH" "$ORIGIN/$MASTER_BRANCH"
+    fi
+
+    git checkout "$MASTER_BRANCH"
+
+    # delete branch
+    if flag fetch; then
+        git push "$ORIGIN" ":refs/heads/$BRANCH"
+    fi
+
+    git branch -d "$BRANCH"
+
+    echo
+    echo "Summary of actions:"
+    echo "- Feature branch '$BRANCH' has been removed"
+    echo "- You are now on branch '$MASTER_BRANCH'"
+    echo
+}
+
 cmd_finish() {
     DEFINE_boolean fetch false "fetch from $ORIGIN before performing finish" F
     DEFINE_boolean rebase false "rebase instead of merge" r
@@ -251,7 +283,7 @@ cmd_finish() {
         require_branches_equal "$MASTER_BRANCH" "$ORIGIN/$MASTER_BRANCH"
     fi
 
-    # if the user wants to merge, do that first
+    # if the user wants to rebase, do that first
     if flag rebase; then
         if ! git drip feature rebase "$NAME" "$MASTER_BRANCH"; then
             msg "Finish was aborted due to conflicts during rebase."
