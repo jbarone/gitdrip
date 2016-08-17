@@ -101,6 +101,7 @@ parse_remote_name() {
 
 cmd_list() {
     DEFINE_boolean verbose false 'verbose (more) output' v
+    DEFINE_boolean description false 'include descriptions' d
     parse_args "$@"
 
     local feature_branches
@@ -140,7 +141,11 @@ cmd_list() {
             printf "  "
         fi
         if flag verbose; then
+            desc=`git config branch.$fullname.description`
             printf "%-${width}s" "$branch"
+            if [ -n desc ]; then
+                printf "%s " "$desc"
+            fi
             if [ "$branch_sha" = "$develop_sha" ]; then
                 printf "(no commits yet)"
             elif [ "$base" = "$branch_sha" ]; then
@@ -150,6 +155,10 @@ cmd_list() {
             else
                 printf "(may be rebased)"
             fi
+        elif flag description; then
+            desc=`git config branch.$fullname.description`
+            printf "%-${width}s" "$branch"
+            printf "%s" "$desc"
         else
             printf "%s" "$branch"
         fi
