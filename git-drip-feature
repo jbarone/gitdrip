@@ -7,7 +7,7 @@ gitdrip_load_settings
 PREFIX=$(git config --get gitdrip.prefix.feature)
 
 usage() {
-    echo "usage: git drip feature [list] [-v]"
+    echo "usage: git drip feature [list] [-dv]"
     echo "       git drip feature start [-F] <name> [<base>]"
     echo "       git drip feature finish [-rFks] <name|nameprefix>"
     echo "       git drip feature delete [-F] <name>"
