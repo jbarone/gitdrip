@@ -17,6 +17,7 @@ usage() {
     echo "       git drip feature rebase [-i] [<name|nameprefix>]"
     echo "       git drip feature checkout [<name|nameprefix>]"
     echo "       git drip feature pull <remote> [<name>]"
+    echo "       git drip feature describe <name>"
 }
 
 cmd_default() {
@@ -168,8 +169,11 @@ cmd_list() {
 
 cmd_start() {
     DEFINE_boolean fetch false 'fetch from origin before performing local operation' F
+    DEFINE_boolean describe false 'add description for feature branch' d
     parse_args "$@"
+    eval set -- "${FLAGS_ARGV}"
     BASE=${2:-$MASTER_BRANCH}
+    DESC=$3
     require_name_arg
 
     # sanity checks
@@ -189,6 +193,14 @@ cmd_start() {
     # create branch
     if ! git checkout -b "$BRANCH" "$BASE"; then
         error "Could not create feature branch '$BRANCH'"
+    fi
+
+    if [ -n $DESC ]; then
+        git config branch.$BRANCH.description "$DESC"
+    fi
+
+    if flag describe; then
+        git branch --edit-description "$BRANCH"
     fi
 
     echo
@@ -501,4 +513,19 @@ cmd_pull() {
         git checkout -q "$BRANCH" || error "Checking out new local branch failed."
         success "Created local branch $BRANCH based on $REMOTE's $BRANCH."
     fi
+}
+
+cmd_describe() {
+    parse_args "$@"
+    expand_nameprefix_arg_or_current
+
+    # sanity checks
+    require_branch "$BRANCH"
+
+    git branch --edit-description "$BRANCH"
+
+    echo
+    echo "Summary of actions:"
+    echo "- The local branch '$BRANCH' had description edited"
+    echo
 }
