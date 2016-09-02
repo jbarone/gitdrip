@@ -30,7 +30,7 @@ func (b *Branch) DetachedHead() bool {
 func LocalBranches() []*Branch {
 	var branches []*Branch
 	current := CurrentBranch()
-	for _, s := range nonBlankLines(cmdOutput("git", "branch", "-q")) {
+	for _, s := range nonBlankLines(cmdOutput("git", "branch", "-q", "--no-color")) {
 		s = strings.TrimSpace(s)
 		if strings.HasPrefix(s, "* ") {
 			// * marks current branch in output.
@@ -52,6 +52,7 @@ func LocalBranches() []*Branch {
 	return branches
 }
 
+// BranchesContains checks if the list of branches contains the one specified
 func BranchesContains(branches []*Branch, name string) bool {
 	for _, b := range branches {
 		if b.Name == name {
