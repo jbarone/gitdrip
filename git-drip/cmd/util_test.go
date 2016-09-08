@@ -1,4 +1,21 @@
-package main
+// Copyright © 2016 Joshua Barone
+//
+// This file is part of git-drip.
+//
+// git-drip is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// git-drip is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with git-drip. If not, see <http://www.gnu.org/licenses/>.
+
+package cmd
 
 import (
 	"bytes"
@@ -49,19 +66,21 @@ func resetReadOnlyFlagAll(path string) error {
 	if err != nil {
 		return err
 	}
-	defer fd.Close()
+	defer func() {
+		_ = fd.Close()
+	}()
 
 	names, _ := fd.Readdirnames(-1)
 	for _, name := range names {
-		resetReadOnlyFlagAll(path + string(filepath.Separator) + name)
+		_ = resetReadOnlyFlagAll(path + string(filepath.Separator) + name)
 	}
 	return nil
 }
 
 func (gt *gitTest) done() {
-	os.Chdir(gt.pwd) // change out of gt.tmpdir first, otherwise following os.RemoveAll fails on windows
-	resetReadOnlyFlagAll(gt.tmpdir)
-	os.RemoveAll(gt.tmpdir)
+	_ = os.Chdir(gt.pwd) // #nosec change out of gt.tmpdir first, otherwise following os.RemoveAll fails on windows
+	_ = resetReadOnlyFlagAll(gt.tmpdir)
+	_ = os.RemoveAll(gt.tmpdir)
 }
 
 // doWork simulates commit 'n' touching 'file' in 'dir'
@@ -122,7 +141,7 @@ func newGitTestFolder(t *testing.T) (gt *gitTest) {
 	}
 	defer func() {
 		if gt == nil {
-			os.RemoveAll(tmpdir)
+			_ = os.RemoveAll(tmpdir) // #nosec
 		}
 	}()
 
@@ -165,7 +184,7 @@ func newGitTest(t *testing.T) (gt *gitTest) {
 	}
 	defer func() {
 		if gt == nil {
-			os.RemoveAll(tmpdir)
+			_ = os.RemoveAll(tmpdir)
 		}
 	}()
 
@@ -182,7 +201,7 @@ func newGitTest(t *testing.T) (gt *gitTest) {
 	trun(t, server, "git", "add", "file", ".gitattributes")
 	trun(t, server, "git", "commit", "-m", "on master")
 
-	for _, name := range []string{"dev.branch", "release.branch"} {
+	for _, name := range []string{"feature/test", "release/v1.0"} {
 		trun(t, server, "git", "checkout", "master")
 		trun(t, server, "git", "checkout", "-b", name)
 		write(t, server+"/file."+name, "this is "+name)
@@ -380,5 +399,5 @@ func testMain(t *testing.T, args ...string) {
 	stderrTrap = new(bytes.Buffer)
 
 	os.Args = append([]string{"git-drip"}, args...)
-	main()
+	Execute()
 }
