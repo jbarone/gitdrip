@@ -21,8 +21,10 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 
+	"github.com/renstrom/dedent"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -37,13 +39,12 @@ var cfgFile string
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
 	Use: "git-drip",
-	Short: `
-The git-drip command is a wrapper for the git command that provides an
-interface to the "git-drip" workflow.`,
-	Long: `
-The git-drip command is a wrapper for the git command that provides an
-interface to the "git-drip" workflow.
-`,
+	Short: dedent.Dedent(`
+		The git-drip command is a wrapper for the git command that provides an
+		interface to the "git-drip" workflow.`),
+	Long: dedent.Dedent(`
+		The git-drip command is a wrapper for the git command that provides an
+		interface to the "git-drip" workflow.`),
 }
 
 // Execute adds all child commands to the root command sets flags appropriately.
@@ -60,12 +61,10 @@ func init() {
 
 	RootCmd.PersistentFlags().VarP(verbose, "verbose", "v", "report commands")
 	RootCmd.PersistentFlags().Lookup("verbose").NoOptDefVal = "1"
-	RootCmd.PersistentFlags().BoolVarP(noRun, "no-run", "n", false, "print but do not run commands")
-	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.gitdrip.yaml)")
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	// RootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	RootCmd.PersistentFlags().BoolVarP(noRun, "no-run", "n", false,
+		"print but do not run commands")
+	RootCmd.PersistentFlags().StringVar(&cfgFile, "config", "",
+		"config file (default is $HOME/.gitdrip.yaml)")
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -75,8 +74,13 @@ func initConfig() {
 	}
 
 	viper.SetConfigName(".gitdrip") // name of config file (without extension)
-	viper.AddConfigPath("$HOME")    // adding home directory as first search path
-	viper.AutomaticEnv()            // read in environment variables that match
+	viper.AddConfigPath(".")
+	if gitDir() != "" {
+		dir, _ := filepath.Split(gitDir())
+		viper.AddConfigPath(dir)
+	}
+	viper.AddConfigPath("$HOME") // adding home directory as first search path
+	viper.AutomaticEnv()         // read in environment variables that match
 
 	// If a config file is found, read it in.
 	if err := viper.ReadInConfig(); err == nil {
