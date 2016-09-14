@@ -21,8 +21,9 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
+
+	"github.com/jbarone/gitdrip"
 
 	"github.com/renstrom/dedent"
 	"github.com/spf13/cobra"
@@ -42,9 +43,14 @@ var RootCmd = &cobra.Command{
 	Short: dedent.Dedent(`
 		The git-drip command is a wrapper for the git command that provides an
 		interface to the "git-drip" workflow.`),
+	// TODO: add better long description
 	Long: dedent.Dedent(`
 		The git-drip command is a wrapper for the git command that provides an
 		interface to the "git-drip" workflow.`),
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		gitdrip.SetNoRun(*noRun)
+		gitdrip.SetVerboseLevel(int(*verbose))
+	},
 }
 
 // Execute adds all child commands to the root command sets flags appropriately.
@@ -74,12 +80,11 @@ func initConfig() {
 	}
 
 	viper.SetConfigName(".gitdrip") // name of config file (without extension)
-	viper.AddConfigPath(".")
-	if gitDir() != "" {
-		dir, _ := filepath.Split(gitDir())
-		viper.AddConfigPath(dir)
+	viper.AddConfigPath(".")        // adding current directory to search path
+	if gitdrip.GitRoot() != "" {
+		viper.AddConfigPath(gitdrip.GitRoot()) // adding git root to search path
 	}
-	viper.AddConfigPath("$HOME") // adding home directory as first search path
+	viper.AddConfigPath("$HOME") // adding home directory to search path
 	viper.AutomaticEnv()         // read in environment variables that match
 
 	// If a config file is found, read it in.

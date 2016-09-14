@@ -204,3 +204,22 @@ func nonBlankLines(text string) []string {
 	}
 	return out
 }
+
+// requireCleanTree will die if the working tree is not in a clean state
+func requireCleanTree() {
+	switch {
+	case HasUnstagedChanges():
+		dief("fatal: Working tree contains unstaged changes. Aborting.")
+	case HasStagedChanges():
+		dief("fatal: Working tree contains uncommited changes. Aborting.")
+	}
+}
+
+func branchesContains(branches []*Branch, name string) bool {
+	for _, b := range branches {
+		if b.Name == name {
+			return true
+		}
+	}
+	return false
+}

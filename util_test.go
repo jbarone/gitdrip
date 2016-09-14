@@ -19,6 +19,8 @@
 package gitdrip
 
 import (
+	"bytes"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -29,9 +31,9 @@ import (
 )
 
 var (
-	runLog []string
-	// testStderr *bytes.Buffer
-	// testStdout *bytes.Buffer
+	runLog     []string
+	testStderr *bytes.Buffer
+	testStdout *bytes.Buffer
 	// died       bool
 )
 
@@ -74,7 +76,7 @@ func resetReadOnlyFlagAll(path string) error {
 	return nil
 }
 
-func (gt *GitTest) Done() {
+func (gt *GitTest) done() {
 	// change out of gt.tmpdir first,
 	// otherwise following os.RemoveAll fails on windows
 	_ = os.Chdir(gt.pwd)
@@ -91,7 +93,7 @@ func gitCheck(t *testing.T) {
 	}
 }
 
-func NewGitTest(t *testing.T) (gt *GitTest) {
+func newGitTest(t *testing.T) (gt *GitTest) {
 	gitCheck(t)
 
 	tmpdir, err := ioutil.TempDir("", "git-drip-test")
@@ -216,5 +218,44 @@ func testRan(t *testing.T, cmds ...string) {
 	if !reflect.DeepEqual(runLog, cmds) {
 		t.Errorf("ran:\n%s", strings.Join(runLog, "\n"))
 		t.Errorf("wanted:\n%s", strings.Join(cmds, "\n"))
+	}
+}
+
+func testPrinted(t *testing.T, buf *bytes.Buffer, name string, messages ...string) {
+	all := buf.String()
+	var errors bytes.Buffer
+	for _, msg := range messages {
+		if strings.HasPrefix(msg, "!") {
+			if strings.Contains(all, msg[1:]) {
+				fmt.Fprintf(&errors, "%s does (but should not) contain %q\n", name, msg[1:])
+			}
+			continue
+		}
+		if !strings.Contains(all, msg) {
+			fmt.Fprintf(&errors, "%s does not contain %q\n", name, msg)
+		}
+	}
+	if errors.Len() > 0 {
+		t.Fatalf("wrong output\n%s%s:\n%s", &errors, name, all)
+	}
+}
+
+func testPrintedStdout(t *testing.T, messages ...string) {
+	testPrinted(t, testStdout, "stdout", messages...)
+}
+
+func testPrintedStderr(t *testing.T, messages ...string) {
+	testPrinted(t, testStderr, "stderr", messages...)
+}
+
+func testNoStdout(t *testing.T) {
+	if testStdout.Len() != 0 {
+		t.Fatalf("unexpected stdout:\n%s", testStdout)
+	}
+}
+
+func testNoStderr(t *testing.T) {
+	if testStderr.Len() != 0 {
+		t.Fatalf("unexpected stderr:\n%s", testStderr)
 	}
 }

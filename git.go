@@ -70,10 +70,20 @@ func (c *GitConfig) Set(key, value string) {
 	c.cfg[key] = value
 }
 
+// Has returns if the given key is in the configuration
+func (c *GitConfig) Has(key string) bool {
+	_, ok := c.cfg[key]
+	return ok
+}
+
 // GitDir returns the path to the git folder for this project
 func GitDir() string {
 	if gitdir == "" {
-		gitdir = trim(cmdOutput("git", "rev-parse", "--git-dir"))
+		var err error
+		gitdir, err = trimErr(cmdOutputErr("git", "rev-parse", "--git-dir"))
+		if err != nil {
+			gitdir = ""
+		}
 	}
 	return gitdir
 }
@@ -141,8 +151,13 @@ type Commit struct {
 
 // CurrentBranch returns the current branch.
 func CurrentBranch() *Branch {
-	name := strings.TrimPrefix(trim(cmdOutput("git", "rev-parse", "--abbrev-ref", HEAD)), "heads/")
-	return &Branch{Name: name}
+	name, err := trimErr(cmdOutputErr("git", "rev-parse", "--abbrev-ref", HEAD))
+	if err != nil {
+		return nil
+	}
+	name = strings.TrimPrefix(name, "heads/")
+	prefix, name := branchPrefix(name)
+	return &Branch{Name: name, Prefix: prefix}
 }
 
 // DetachedHead reports whether branch b corresponds to a detached HEAD
@@ -325,7 +340,12 @@ func LocalBranches() []*Branch {
 			// by using CurrentBranch().Name for the current branch.
 			// It detects detached HEAD mode in a more portable way.
 			// (git rev-parse --abbrev-ref HEAD returns 'HEAD').
-			s = current.Name
+			if current != nil {
+
+				s = current.Name
+			} else {
+				s = strings.TrimPrefix(s, "* ")
+			}
 		}
 		prefix, name := branchPrefix(s)
 		branches = append(branches, &Branch{Name: name, Prefix: prefix})
@@ -347,4 +367,10 @@ func OriginBranches() []string {
 		}
 	}
 	return branches
+}
+
+// IsRepoHeadless checks if the current git repo is headless
+func IsRepoHeadless() bool {
+	_, err := cmdOutputErr("git", "rev-parse", "--quiet", "--verify", "HEAD")
+	return err != nil
 }

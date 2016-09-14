@@ -21,8 +21,8 @@ package gitdrip
 import "testing"
 
 func TestGitConfig(t *testing.T) {
-	gt := NewGitTest(t)
-	defer gt.Done()
+	gt := newGitTest(t)
+	defer gt.done()
 
 	runLogTrap = []string{} // non-nil, to trigger saving of commands
 	c := Config()
@@ -43,8 +43,8 @@ func TestGitConfig(t *testing.T) {
 }
 
 func TestGitConfigSet(t *testing.T) {
-	gt := NewGitTest(t)
-	defer gt.Done()
+	gt := newGitTest(t)
+	defer gt.done()
 
 	runLogTrap = []string{} // non-nil, to trigger saving of commands
 	c := Config()
@@ -63,8 +63,8 @@ func TestGitConfigSet(t *testing.T) {
 }
 
 func TestGitDir(t *testing.T) {
-	gt := NewGitTest(t)
-	defer gt.Done()
+	gt := newGitTest(t)
+	defer gt.done()
 
 	path := GitDir()
 	if path != ".git" {
@@ -73,8 +73,8 @@ func TestGitDir(t *testing.T) {
 }
 
 func TestGitRoot(t *testing.T) {
-	gt := NewGitTest(t)
-	defer gt.Done()
+	gt := newGitTest(t)
+	defer gt.done()
 
 	path := GitRoot()
 	if path != "." {
@@ -83,8 +83,8 @@ func TestGitRoot(t *testing.T) {
 }
 
 func TestCurrentBranch(t *testing.T) {
-	gt := NewGitTest(t)
-	defer gt.Done()
+	gt := newGitTest(t)
+	defer gt.done()
 
 	t.Logf("on master")
 	checkCurrentBranch(t, "master", "origin/master", false, false, "", "")
@@ -142,8 +142,8 @@ func checkCurrentBranch(t *testing.T, name, origin string, isLocal, hasPending b
 }
 
 func TestHasStagedChanges(t *testing.T) {
-	gt := NewGitTest(t)
-	defer gt.Done()
+	gt := newGitTest(t)
+	defer gt.done()
 
 	t.Logf("clean repo")
 	if HasStagedChanges() {
@@ -164,8 +164,8 @@ func TestHasStagedChanges(t *testing.T) {
 }
 
 func TestHasUnstagedChanges(t *testing.T) {
-	gt := NewGitTest(t)
-	defer gt.Done()
+	gt := newGitTest(t)
+	defer gt.done()
 
 	if HasUnstagedChanges() {
 		t.Fatal("Has unstaged changes, but expected none")
