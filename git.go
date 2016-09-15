@@ -49,7 +49,12 @@ func Config() *GitConfig {
 		lines := nonBlankLines(cmdOutput("git", "config", "--list"))
 		for _, line := range lines {
 			parts := strings.Split(line, "=")
-			gitconfig.cfg[parts[0]] = strings.Join(parts[1:], "=")
+			switch len(parts) {
+			case 1:
+				gitconfig.cfg[parts[0]] = ""
+			default:
+				gitconfig.cfg[parts[0]] = strings.Join(parts[1:], "=")
+			}
 		}
 	}
 	return gitconfig
@@ -329,7 +334,11 @@ func branchPrefix(s string) (string, string) {
 func LocalBranches() []*Branch {
 	var branches []*Branch
 	current := CurrentBranch()
-	for _, s := range nonBlankLines(cmdOutput("git", "branch", "-q")) {
+	out, err := cmdOutputErr("git", "branch", "-q")
+	if err != nil {
+		return branches
+	}
+	for _, s := range nonBlankLines(out) {
 		s = strings.TrimSpace(s)
 		if strings.HasPrefix(s, "* ") {
 			// * marks current branch in output.
@@ -373,4 +382,13 @@ func OriginBranches() []string {
 func IsRepoHeadless() bool {
 	_, err := cmdOutputErr("git", "rev-parse", "--quiet", "--verify", "HEAD")
 	return err != nil
+}
+
+func contains(branches []*Branch, name string) bool {
+	for _, b := range branches {
+		if b.Name == name {
+			return true
+		}
+	}
+	return false
 }

@@ -34,7 +34,7 @@ var (
 	runLog     []string
 	testStderr *bytes.Buffer
 	testStdout *bytes.Buffer
-	// died       bool
+	died       bool
 )
 
 var gitversion = "unknown git version" // git version for error logs
@@ -190,15 +190,17 @@ func trun(t *testing.T, dir string, cmdline ...string) string {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		if cmdline[0] == "git" {
-			t.Fatalf("in %s/, ran %s with %s:\n%v\n%s", filepath.Base(dir), cmdline, gitversion, err, out)
+			t.Fatalf("in %s/, ran %s with %s:\n%v\n%s", filepath.Base(dir),
+				cmdline, gitversion, err, out)
 		}
-		t.Fatalf("in %s/, ran %s: %v\n%s", filepath.Base(dir), cmdline, err, out)
+		t.Fatalf("in %s/, ran %s: %v\n%s", filepath.Base(dir),
+			cmdline, err, out)
 	}
 	return string(out)
 }
 
-// fromSlash is like filepath.FromSlash, but it ignores ! at the start of the path
-// and " (staged)" at the end.
+// fromSlash is like filepath.FromSlash, but it ignores ! at the start of
+// the path and " (staged)" at the end.
 func fromSlash(path string) string {
 	if len(path) > 0 && path[0] == '!' {
 		return "!" + fromSlash(path[1:])
@@ -221,13 +223,15 @@ func testRan(t *testing.T, cmds ...string) {
 	}
 }
 
-func testPrinted(t *testing.T, buf *bytes.Buffer, name string, messages ...string) {
+func testPrinted(t *testing.T, buf *bytes.Buffer,
+	name string, messages ...string) {
 	all := buf.String()
 	var errors bytes.Buffer
 	for _, msg := range messages {
 		if strings.HasPrefix(msg, "!") {
 			if strings.Contains(all, msg[1:]) {
-				fmt.Fprintf(&errors, "%s does (but should not) contain %q\n", name, msg[1:])
+				fmt.Fprintf(&errors, "%s does (but should not) contain %q\n",
+					name, msg[1:])
 			}
 			continue
 		}

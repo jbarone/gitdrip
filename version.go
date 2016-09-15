@@ -16,23 +16,14 @@
 // along with git-drip. If not, see <http://www.gnu.org/licenses/>.
 //
 
-package cmd
+package gitdrip
 
-import (
-	"github.com/jbarone/gitdrip"
-	"github.com/spf13/cobra"
-)
+import "fmt"
 
-// versionCmd represents the version command
-var versionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "Show version information",
-	Long:  "Show version information",
-	Run: func(cmd *cobra.Command, args []string) {
-		gitdrip.PrintVersion()
-	},
-}
+// Version the current version of git-drip
+const Version = "0.3.2"
 
-func init() {
-	RootCmd.AddCommand(versionCmd)
+// PrintVersion prints the current version to standard output
+func PrintVersion() {
+	fmt.Fprintln(stdout(), Version)
 }

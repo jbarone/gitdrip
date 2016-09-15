@@ -22,7 +22,7 @@ const (
 	dripFeature = "gitdrip.prefix.feature"
 	dripRelease = "gitdrip.prefix.release"
 	dripHotfix  = "gitdrip.prefix.hotfix"
-	dripVersion = "gitdrip.perfix.versiontag"
+	dripVersion = "gitdrip.prefix.versiontag"
 )
 
 var prefixes []string
@@ -44,11 +44,11 @@ func DripBranchPrefixes() []string {
 }
 
 func isDripMasterConfigured() bool {
-	master := Config().Get(dripMaster)
-	if master != "" {
-
+	if !Config().Has(dripMaster) || Config().Get(dripMaster) == "" ||
+		!contains(LocalBranches(), Config().Get(dripMaster)) {
+		return false
 	}
-	return false
+	return true
 }
 
 func areDripPrefixConfigured() bool {
@@ -58,7 +58,7 @@ func areDripPrefixConfigured() bool {
 		dripHotfix,
 		dripVersion,
 	} {
-		if p := Config().Get(prefix); p == "" {
+		if !Config().Has(prefix) {
 			return false
 		}
 	}

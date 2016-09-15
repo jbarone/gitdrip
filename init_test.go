@@ -18,7 +18,52 @@
 
 package gitdrip
 
-import "testing"
+import (
+	"bytes"
+	"fmt"
+	"testing"
+)
+
+func testInit(t *testing.T, canDie, force, defaults bool) {
+	// reset git vars
+	gitconfig = nil
+	gitdir = ""
+	gitroot = ""
+
+	defer func() {
+		runLog = runLogTrap
+		testStdout = stdoutTrap
+		testStderr = stderrTrap
+
+		dieTrap = nil
+		runLogTrap = nil
+		stdoutTrap = nil
+		stderrTrap = nil
+		if err := recover(); err != nil {
+			if died && canDie {
+				return
+			}
+			var msg string
+			if died {
+				msg = "died"
+			} else {
+				msg = fmt.Sprintf("panic: %v", err)
+			}
+			t.Fatalf("%s\nstdout:\n%sstderr:\n%s", msg, testStdout, testStderr)
+		}
+	}()
+
+	dieTrap = func() {
+		died = true
+		panic("died")
+	}
+	died = false
+	runLogTrap = []string{} // non-nil, to trigger saving of commands
+	stdoutTrap = new(bytes.Buffer)
+	stderrTrap = new(bytes.Buffer)
+
+	InitDrip(force, defaults)
+}
 
 func TestInitRequire(t *testing.T) {
 	gt := newGitTest(t)
@@ -30,21 +75,22 @@ func TestInitRequire(t *testing.T) {
 	write(t, gt.client+"/file", "more new content")
 
 	t.Log("unstaged")
-	InitDrip(false, true)
-	testPrintedStderr(t, "fatal: Working tree contains unstaged changes. Aborting")
+	testInit(t, true, false, true)
+	testPrintedStderr(t,
+		"fatal: Working tree contains unstaged changes. Aborting")
 
 	trun(t, gt.client, "git", "add", "file")
 
 	t.Log("uncommited")
-	InitDrip(false, true)
-	testPrintedStderr(t, "fatal: Working tree contains uncommited changes. Aborting")
+	testInit(t, true, false, true)
+	testPrintedStderr(t,
+		"fatal: Working tree contains uncommited changes. Aborting")
 }
 
 func TestInitGitDripAlready(t *testing.T) {
 	gt := newGitTest(t)
 	defer gt.done()
 
-	stderrTrap = testStderr
 	trun(t, gt.client, "git", "config", "gitdrip.branch.master", "master")
 	trun(t, gt.client, "git", "config", "gitdrip.prefix.feature", "feature/")
 	trun(t, gt.client, "git", "config", "gitdrip.prefix.release", "release/")
@@ -52,8 +98,63 @@ func TestInitGitDripAlready(t *testing.T) {
 	trun(t, gt.client, "git", "config", "gitdrip.prefix.versiontag", "")
 	trun(t, gt.client, "git", "commit", "--allow-empty", "-m", "msg")
 
-	InitDrip(false, true)
-	testPrintedStderr(t, "Already initialized for git-drip.",
+	testInit(t, true, false, true)
+	testPrintedStderr(t,
+		"Already initialized for git-drip.",
 		"To force reinitialization, use: git drip init -f")
-	stderrTrap = nil
+}
+
+func TestInitEmpty(t *testing.T) {
+	gt := newGitTest(t)
+	defer gt.done()
+
+	trun(t, gt.client, "rm", "-rf", ".git")
+
+	testInit(t, false, false, true)
+	testRan(t,
+		"git init",
+		"git config gitdrip.branch.master master",
+		"git symbolic-ref HEAD refs/heads/master",
+		"git commit --allow-empty --quiet -m Initial commit",
+		"git checkout -q master",
+		"git config gitdrip.prefix.feature feature/",
+		"git config gitdrip.prefix.release release/",
+		"git config gitdrip.prefix.hotfix hotfix/",
+		"git config gitdrip.prefix.versiontag",
+	)
+}
+
+func TestInitDrip(t *testing.T) {
+	gt := newGitTest(t)
+	defer gt.done()
+
+	testInit(t, false, false, true)
+	testRan(t,
+		"git config gitdrip.branch.master master",
+		"git config gitdrip.prefix.feature feature/",
+		"git config gitdrip.prefix.release release/",
+		"git config gitdrip.prefix.hotfix hotfix/",
+		"git config gitdrip.prefix.versiontag",
+	)
+}
+
+func TestInitDripForce(t *testing.T) {
+	gt := newGitTest(t)
+	defer gt.done()
+
+	trun(t, gt.client, "git", "config", "gitdrip.branch.master", "master")
+	trun(t, gt.client, "git", "config", "gitdrip.prefix.feature", "feature/")
+	trun(t, gt.client, "git", "config", "gitdrip.prefix.release", "release/")
+	trun(t, gt.client, "git", "config", "gitdrip.prefix.hotfix", "hotfix/")
+	trun(t, gt.client, "git", "config", "gitdrip.prefix.versiontag", "")
+	trun(t, gt.client, "git", "commit", "--allow-empty", "-m", "msg")
+
+	testInit(t, false, true, true)
+	testRan(t,
+		"git config gitdrip.branch.master master",
+		"git config gitdrip.prefix.feature feature/",
+		"git config gitdrip.prefix.release release/",
+		"git config gitdrip.prefix.hotfix hotfix/",
+		"git config gitdrip.prefix.versiontag",
+	)
 }

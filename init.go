@@ -3,8 +3,6 @@ package gitdrip
 import (
 	"fmt"
 	"strings"
-
-	"github.com/renstrom/dedent"
 )
 
 func requireCleanRepo() {
@@ -148,9 +146,8 @@ func InitDrip(force, defaults bool) {
 	requireCleanRepo()
 
 	if DripInitialized() && !force {
-		dief(dedent.Dedent(`
-		Already initialized for git-drip.
-		To force reinitialization, use: git drip init -f`))
+		dief(`Already initialized for git-drip.
+To force reinitialization, use: git drip init -f`)
 	}
 
 	if defaults {
