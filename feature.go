@@ -19,6 +19,9 @@ package gitdrip
 
 import (
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/renstrom/dedent"
@@ -80,7 +83,7 @@ func getFeatureBranchOrCurrent(arg string) *Branch {
 	return branch
 }
 
-func finishFeatureCleanup(branch *Branch, origin, master string,
+func finishFeatureCleanup(branch *Branch, master, origin string,
 	remote, keep bool) {
 	requireBranch(branch)
 	requireCleanTree()
@@ -107,6 +110,34 @@ func finishFeatureCleanup(branch *Branch, origin, master string,
 	}
 	fmt.Fprintf(stdout(),
 		"- You are now on branch '%s'\n\n", master)
+}
+
+func featureResolveMerge(branch *Branch, path, master string,
+	remote, keep bool) {
+	if HasUnstagedChanges() || HasStagedChanges() {
+		fmt.Fprintf(stdout(), dedent.Dedent(`
+			Merge conflicts not resolved yet, use:
+			    git mergetool
+			    git commit
+
+			You can then complete the finish by running it again:
+			    git drip feature finish %s
+
+			`), branch.Name)
+		die()
+	}
+
+	content, err := ioutil.ReadFile(path)
+	if err != nil {
+		dief(err.Error())
+	}
+
+	_ = os.Remove(path) // #nosec
+	finishBase := trim(string(content))
+	if branch.isMergedInto(finishBase) {
+		finishFeatureCleanup(branch, master, origin(), remote, keep)
+		os.Exit(0)
+	}
 }
 
 // ListFeatures displays the feature branches for the repo
@@ -192,10 +223,6 @@ func StartFeatures(branchname, basearg, message string, fetch, describe bool) {
 	requireBranchAbsent(branch)
 
 	master := Config().Get(dripMaster)
-	origin := "origin"
-	if Config().Has(dripOrigin) {
-		origin = Config().Get(dripOrigin)
-	}
 
 	base := master
 	if basearg != "" {
@@ -203,25 +230,26 @@ func StartFeatures(branchname, basearg, message string, fetch, describe bool) {
 	}
 
 	if fetch {
-		run("git", "fetch", "-q", origin, master)
+		run("git", "fetch", "-q", origin(), master)
 	}
 
-	if remoteContains(origin + "/" + master) {
-		requireEqual(master, origin+"/"+master)
+	if remoteContains(origin() + "/" + master) {
+		requireEqual(master, origin()+"/"+master)
 	}
 
-	err := runErr("git", "checkout", "-b", branch.FullName(), base)
+	err := runErr("git", "checkout", "-b", branch.PrefixedName(), base)
 	if err != nil {
-		dief("Could not create feature branch '%s'", branch.FullName())
+		dief("Could not create feature branch '%s'", branch.PrefixedName())
 	}
 
 	if message != "" {
 		Config().Set(
-			fmt.Sprintf("branch.%s.description", branch.FullName()), message)
+			fmt.Sprintf("branch.%s.description", branch.PrefixedName()),
+			message)
 	}
 
 	if describe {
-		run("git", "branch", "--edit-description", branch.FullName())
+		run("git", "branch", "--edit-description", branch.PrefixedName())
 	}
 
 	// print summary
@@ -250,11 +278,7 @@ func DeleteFeature(brancharg string, remote bool) {
 	run("git", "checkout", master)
 
 	if remote {
-		origin := "origin"
-		if Config().Has(dripOrigin) {
-			origin = Config().Get(dripOrigin)
-		}
-		run("git", "push", origin, ":"+branch.PrefixedName())
+		run("git", "push", origin(), ":"+branch.PrefixedName())
 	}
 
 	run("git", "branch", "-d", branch.PrefixedName())
@@ -306,4 +330,69 @@ func RebaseFeature(brancharg string, interactive bool) {
 
 	run("git", "checkout", "-q", branch.PrefixedName())
 	run("git", "rebase", opts, Config().Get(dripMaster))
+}
+
+// FinishFeature concludes the feature branch and merge it into master
+func FinishFeature(brancharg string, remote, keep, squash, rebase bool) {
+	branch := getFeatureBranchOrCurrent(brancharg)
+	requireBranch(branch)
+	master := Config().Get(dripMaster)
+
+	path := filepath.Join(GitDir(), ".gitdrip", "MERGE_BASE")
+	if ok, _ := exists(path); ok {
+		// restoring from merge conflict
+		featureResolveMerge(branch, path, master, remote, keep)
+	}
+
+	requireCleanTree()
+	remoteBranch := origin() + "/" + branch.PrefixedName()
+	if remoteContains(remoteBranch) {
+		if remote {
+			run("git", "fetch", "-q", origin(), branch.PrefixedName())
+		}
+		requireEqual(master, remoteBranch)
+	}
+	remoteMaster := origin() + "/" + master
+	if remoteContains(remoteMaster) {
+		requireEqual(master, remoteMaster)
+	}
+
+	if rebase {
+		err := runErr("git", "drip", "feature", "rebase",
+			branch.Name, remoteMaster)
+		if err != nil {
+			fmt.Fprintln(stderr(), dedent.Dedent(`
+				Finish was aborted due to conflicts during rebase.
+				Please finish the rebase manually now.)
+				When finished, re-run)
+				   git drip feature finish '%s' '%s'
+				`),
+				branch.FullName(), master)
+		}
+	}
+
+	run("git", "checkout", master)
+	var err error
+	if squash {
+		err = runErr("git", "merge", "--squash", branch.PrefixedName())
+	} else {
+		err = runErr("git", "merge", branch.PrefixedName())
+	}
+	if err != nil {
+		fmt.Println("MESSAGE:", err)
+		_ = os.MkdirAll(filepath.Dir(path), 0755)        // #nosec
+		_ = ioutil.WriteFile(path, []byte(master), 0644) // #nosec
+		fmt.Fprintln(stdout(), dedent.Dedent(`
+			There were merge conflicts. To resolve the merge conflict manually, use:
+				git mergetool
+				git commit
+
+			You can then complete the finish by running it again:
+			    git drip feature finish %s
+
+			`), branch.Name)
+		die()
+	}
+
+	finishFeatureCleanup(branch, master, origin(), remote, keep)
 }

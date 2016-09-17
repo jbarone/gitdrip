@@ -256,3 +256,21 @@ func RequireDripInitialized() {
 			"\"git drip init\" first.")
 	}
 }
+
+func exists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return true, err
+}
+
+func origin() string {
+	if Config().Has(dripOrigin) {
+		return Config().Get(dripOrigin)
+	}
+	return "origin"
+}

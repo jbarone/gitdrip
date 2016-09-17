@@ -18,12 +18,6 @@
 package cmd
 
 import (
-	"fmt"
-	"io/ioutil"
-	"os"
-	"path/filepath"
-	"strings"
-
 	"github.com/jbarone/gitdrip"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -197,108 +191,6 @@ func init() {
 	featureCmd.AddCommand(featurePullCmd)
 }
 
-func getBranchNameWidth(branches []*Branch) (width int) {
-	for _, b := range branches {
-		if len(b.Name) > width {
-			width = len(b.Name)
-		}
-	}
-	return
-}
-
-func featurePrefix() string {
-	return GitConfig()["gitdrip.prefix.feature"]
-}
-
-func getFeatureBranch(prefix, name string) *Branch {
-	branch := &Branch{
-		Name:   name,
-		Prefix: prefix,
-	}
-	branches := LocalBranches()
-	if BranchesContains(branches, branch.FullName()) {
-		return branch
-	}
-
-	var matches []*Branch
-	for _, b := range branches {
-		if strings.HasPrefix(b.FullName(), branch.FullName()) {
-			matches = append(matches, b)
-		}
-	}
-
-	switch len(matches) {
-	case 0:
-		dief("No branch matches prefix " + branch.Name)
-	case 1:
-		return matches[0]
-	default:
-		fmt.Fprintf(stderr(), "Multiple branches match prefix '%s':",
-			branch.Name)
-		for _, m := range matches {
-			fmt.Fprintln(stderr(), "-", m.FullName())
-		}
-		die()
-	}
-	return nil
-}
-
-func getCurrentBranch(prefix string) *Branch {
-	branch := CurrentBranch()
-
-	if strings.HasPrefix(branch.Name, prefix) {
-		branch.Prefix = prefix
-		branch.Name = strings.TrimPrefix(branch.Name, prefix)
-		return branch
-	}
-
-	return nil
-}
-
-func getFeatureBranchOrCurrent(args []string) *Branch {
-	prefix := featurePrefix()
-	if len(args) > 0 {
-		return getFeatureBranch(prefix, args[0])
-	}
-
-	branch := getCurrentBranch(prefix)
-	if branch == nil {
-		dief("The current HEAD is not a feature branch.\n" +
-			"Please specify a <name> argument")
-	}
-
-	return branch
-}
-
-func finishFeatureCleanup(branch *Branch, origin, master string,
-	remote, keep bool) {
-	RequireBranch(branch)
-	RequireCleanTree()
-
-	if remote {
-		run("git", "push", origin, ":refs/heads/"+branch.FullName())
-	}
-
-	if !keep {
-		run("git", "branch", "-d", branch.FullName())
-	}
-
-	// print summary
-	fmt.Fprintln(stdout(), "\nSummary of actions:")
-	fmt.Fprintf(stdout(), "- The feature branch '%s' was merged into '%s'\n",
-		branch.FullName(), master)
-	switch keep {
-	case true:
-		fmt.Fprintf(stdout(),
-			"- Feature branch '%s' is still available\n", branch.FullName())
-	case false:
-		fmt.Fprintf(stdout(),
-			"- Feature branch '%s' has been removed\n", branch.FullName())
-	}
-	fmt.Fprintf(stdout(),
-		"- You are now on branch '%s'\n\n", master)
-}
-
 // ListFeatures displays the feature branches for the repo
 func ListFeatures(cmd *cobra.Command, args []string) {
 	descriptions := viper.GetBool("descriptions")
@@ -311,60 +203,16 @@ func StartFeatures(cmd *cobra.Command, args []string) {
 		dief("Missing argument <name>")
 	}
 
-	branch := &Branch{
-		Name:   args[0],
-		Prefix: featurePrefix(),
+	basearg := ""
+	if len(args) > 1 {
+		basearg = args[1]
 	}
 
 	fetch, _ := cmd.Flags().GetBool("fetch")          // #nosec
 	describe, _ := cmd.Flags().GetBool("description") // #nosec
 	message, _ := cmd.Flags().GetString("message")    // #nosec
 
-	RequireBranchAbsent(branch)
-
-	config := GitConfig()
-	master := config["gitdrip.branch.master"]
-	origin := "origin"
-	if hasKey(config, "gitdrip.origin") {
-		origin = config["gitdrip.origin"]
-	}
-
-	base := master
-	if len(args) == 2 {
-		base = args[1]
-	}
-
-	if fetch {
-		run("git", "fetch", "-q", origin, master)
-	}
-
-	if BranchesContains(RemoteBranches(), origin+"/"+master) {
-		RequireEqual(master, origin+"/"+master)
-	}
-
-	err := runErr("git", "checkout", "-b", branch.FullName(), base)
-	if err != nil {
-		dief("Could not create feature branch '%s'", branch.FullName())
-	}
-
-	if message != "" {
-		setConfiguration(
-			fmt.Sprintf("branch.%s.description", branch.FullName()), message)
-	}
-
-	if describe {
-		run("git", "branch", "--edit-description", branch.FullName())
-	}
-
-	// print summary
-	fmt.Fprintln(stdout(), "\nSummary of actions:")
-	fmt.Fprintf(stdout(), "- A new branch '%s' was created, based on '%s'\n",
-		branch.FullName(), base)
-	fmt.Fprintf(stdout(),
-		"- You are now on branch '%s'\n\n", branch.FullName())
-	fmt.Fprintln(stdout(),
-		"Now, start committing on your feature. When done, use:")
-	fmt.Fprintf(stdout(), "     git drip feature finish %s\n\n", branch.Name)
+	gitdrip.StartFeatures(args[0], basearg, message, fetch, describe)
 }
 
 // DescribeFeature displays the feature branches for the repo
@@ -389,97 +237,18 @@ func DeleteFeature(cmd *cobra.Command, args []string) {
 	gitdrip.DeleteFeature(args[0], remote)
 }
 
-func featureResolveMerge(branch *Branch, path, master string,
-	remote, keep bool) {
-	if gitWorkingTreeStatus() != clean {
-		fmt.Fprintln(stdout(), "\nMerge conflicts not resolved yet, use:")
-		fmt.Fprintln(stdout(), "    git mergetool")
-		fmt.Fprintln(stdout(), "    git commit")
-		fmt.Fprintln(stdout(),
-			"\nYou can then complete the finish by running it again:")
-		fmt.Fprintf(stdout(),
-			"    git drip feature finish %s\n\n", branch.Name)
-		die()
-	}
-
-	content, err := ioutil.ReadFile(path)
-	if err != nil {
-		dief(err.Error())
-	}
-
-	_ = os.Remove(path) // #nosec
-	finishBase := trim(string(content))
-	if branch.isMergedInto(finishBase) {
-		finishFeatureCleanup(branch, master, origin(GitConfig()), remote, keep)
-		os.Exit(0)
-	}
-}
-
 // FinishFeature ...
 func FinishFeature(cmd *cobra.Command, args []string) {
-	branch := getFeatureBranchOrCurrent(args)
-	RequireBranch(branch)
+	brancharg := ""
+	if len(args) > 0 {
+		brancharg = args[0]
+	}
 	remote, _ := cmd.Flags().GetBool("remote")
 	keep, _ := cmd.Flags().GetBool("keep")
 	squash, _ := cmd.Flags().GetBool("squash")
 	rebase, _ := cmd.Flags().GetBool("rebase")
-	config := GitConfig()
-	master := config["gitdrip.branch.master"]
 
-	path := filepath.Join(gitDir(), ".gitdrip", "MERGE_BASE")
-	if ok, _ := exists(path); ok {
-		// restoring from merge conflict
-		featureResolveMerge(branch, path, master, remote, keep)
-	}
-
-	RequireCleanTree()
-	remoteBranch := origin(config) + "/" + branch.FullName()
-	if BranchesContains(RemoteBranches(), remoteBranch) {
-		if remote {
-			run("git", "fetch", "-q", origin(config), branch.FullName())
-		}
-		RequireEqual(master, remoteBranch)
-	}
-	remoteMaster := origin(config) + "/" + master
-	if BranchesContains(RemoteBranches(), remoteMaster) {
-		RequireEqual(master, remoteMaster)
-	}
-
-	if rebase {
-		err := runErr("git", "drip", "feature", "rebase",
-			branch.Name, remoteMaster)
-		if err != nil {
-			fmt.Fprintln(stderr(),
-				"Finish was aborted due to conflicts during rebase.")
-			fmt.Fprintln(stderr(), "Please finish the rebase manually now.")
-			fmt.Fprintln(stderr(), "When finished, re-run")
-			fmt.Fprintf(stderr(), "    git drip feature finish '%s' '%s'\n",
-				branch.FullName(), master)
-		}
-	}
-
-	run("git", "checkout", master)
-	var opts string
-	if squash {
-		opts = "--squash"
-	}
-	err := runErr("git", "merge", opts, branch.FullName())
-	if err != nil {
-		_ = os.MkdirAll(filepath.Dir(path), 0644)        // #nosec
-		_ = ioutil.WriteFile(path, []byte(master), 0644) // #nosec
-		fmt.Fprintln(stdout(),
-			"\nThere were merge conflicts. To resolve the merge conflict "+
-				"manually, use:")
-		fmt.Fprintln(stdout(), "    git mergetool")
-		fmt.Fprintln(stdout(), "    git commit")
-		fmt.Fprintln(stdout(),
-			"\nYou can then complete the finish by running it again:")
-		fmt.Fprintf(stdout(),
-			"    git drip feature finish %s\n\n", branch.Name)
-		die()
-	}
-
-	finishFeatureCleanup(branch, master, origin(config), remote, keep)
+	gitdrip.FinishFeature(brancharg, remote, keep, squash, rebase)
 }
 
 // CheckoutFeature checks out the specified feature branch

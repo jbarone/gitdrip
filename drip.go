@@ -29,7 +29,7 @@ const (
 var prefixes []string
 
 // DripBranchPrefixes returns a list of prefixes used for branches
-func DripBranchPrefixes() []string {
+func dripBranchPrefixes() []string {
 	if len(prefixes) == 0 {
 		for _, prefix := range []string{
 			dripFeature,

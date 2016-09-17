@@ -244,6 +244,20 @@ func (b *Branch) Branchpoint() string {
 	return b.branchpoint
 }
 
+func (b *Branch) isMergedInto(base string) bool {
+	for _, s := range nonBlankLines(
+		cmdOutput("git", "branch", "--no-color", "--contains", b.FullName())) {
+		s = trim(s)
+		if strings.HasPrefix(s, "* ") {
+			s = strings.TrimPrefix(s, "* ")
+		}
+		if s == base {
+			return true
+		}
+	}
+	return false
+}
+
 func (b *Branch) loadPending() {
 	if b.loadedPending {
 		return
@@ -287,11 +301,11 @@ func (b *Branch) loadPending() {
 			// even if we later see additional commits on a different branch leading down to
 			// a lower location on the same origin branch.
 			// Check c.Merge (the second parent) too, so we don't depend on the parent order.
-			if strings.Contains(cmdOutput("git", "branch", "-a", "--contains", c.Parent), " "+origin+"\n") {
+			if strings.Contains(cmdOutput("git", "branch", "-a", "--contains", "--no-color", c.Parent), " "+origin+"\n") {
 				foundMergeBranchpoint = true
 				b.branchpoint = c.Parent
 			}
-			if strings.Contains(cmdOutput("git", "branch", "-a", "--contains", c.Merge), " "+origin+"\n") {
+			if strings.Contains(cmdOutput("git", "branch", "-a", "--contains", "--no-color", c.Merge), " "+origin+"\n") {
 				foundMergeBranchpoint = true
 				b.branchpoint = c.Merge
 			}
@@ -317,7 +331,7 @@ func (b *Branch) loadPending() {
 }
 
 func branchPrefix(s string) (string, string) {
-	for _, prefix := range DripBranchPrefixes() {
+	for _, prefix := range dripBranchPrefixes() {
 		if strings.HasPrefix(s, prefix) {
 			return prefix, strings.TrimPrefix(s, prefix)
 		}
