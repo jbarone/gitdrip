@@ -207,10 +207,7 @@ func (b *Branch) OriginBranch() string {
 // FullName of branch
 func (b *Branch) FullName() string {
 	if b.Name != HEAD {
-		if b.Prefix == "" {
-			return "refs/heads/" + b.Name
-		}
-		return strings.Join([]string{"refs/heads", b.Prefix, b.Name}, "/")
+		return "refs/heads/" + b.PrefixedName()
 	}
 	return b.Name
 }
@@ -220,7 +217,7 @@ func (b *Branch) PrefixedName() string {
 	if b.Name == HEAD || b.Prefix == "" {
 		return b.Name
 	}
-	return b.Prefix + "/" + b.Name
+	return b.Prefix + b.Name
 }
 
 // IsLocalOnly reports whether b is a local work branch (only local, not known to remote server).
@@ -334,7 +331,7 @@ func branchPrefix(s string) (string, string) {
 func LocalBranches() []*Branch {
 	var branches []*Branch
 	current := CurrentBranch()
-	out, err := cmdOutputErr("git", "branch", "-q")
+	out, err := cmdOutputErr("git", "branch", "-q", "--no-color")
 	if err != nil {
 		return branches
 	}
@@ -350,14 +347,45 @@ func LocalBranches() []*Branch {
 			// It detects detached HEAD mode in a more portable way.
 			// (git rev-parse --abbrev-ref HEAD returns 'HEAD').
 			if current != nil {
-
-				s = current.Name
+				s = current.PrefixedName()
 			} else {
 				s = strings.TrimPrefix(s, "* ")
 			}
 		}
 		prefix, name := branchPrefix(s)
 		branches = append(branches, &Branch{Name: name, Prefix: prefix})
+	}
+	return branches
+}
+
+// PrefixedBranches returns a list of all known local branches with specified
+// prefix.
+func PrefixedBranches(prefix string) []*Branch {
+	var branches []*Branch
+	current := CurrentBranch()
+	for _, s := range nonBlankLines(
+		cmdOutput("git", "branch", "-q", "--no-color")) {
+		s = strings.TrimSpace(s)
+		if strings.HasPrefix(s, "* ") {
+			// * marks current branch in output.
+			// Normally the current branch has a name like any other,
+			// but in detached HEAD mode the branch listing shows
+			// a localized (translated) textual description instead of
+			// a branch name. Avoid language-specific differences
+			// by using CurrentBranch().Name for the current branch.
+			// It detects detached HEAD mode in a more portable way.
+			// (git rev-parse --abbrev-ref HEAD returns 'HEAD').
+			if current != nil {
+				s = current.PrefixedName()
+			} else {
+				s = strings.TrimPrefix(s, "* ")
+			}
+		}
+
+		if strings.HasPrefix(s, prefix) {
+			p, name := branchPrefix(s)
+			branches = append(branches, &Branch{Name: name, Prefix: p})
+		}
 	}
 	return branches
 }
@@ -386,9 +414,51 @@ func IsRepoHeadless() bool {
 
 func contains(branches []*Branch, name string) bool {
 	for _, b := range branches {
-		if b.Name == name {
+		if b.PrefixedName() == name {
 			return true
 		}
 	}
 	return false
+}
+
+func remoteContains(name string) bool {
+	for _, b := range OriginBranches() {
+		if b == name {
+			return true
+		}
+	}
+	return false
+}
+
+type compareStatus int
+
+const (
+	equal     compareStatus = iota
+	behind    compareStatus = iota
+	ahead     compareStatus = iota
+	needMerge compareStatus = iota
+	noBase    compareStatus = iota
+)
+
+// compareBranches compares two given branches
+func compareBranches(local, remote string) compareStatus {
+	commit1 := trim(cmdOutput("git", "rev-parse", local))
+	commit2 := trim(cmdOutput("git", "rev-parse", remote))
+	if commit1 == commit2 {
+		return equal
+	}
+
+	base, err := trimErr(cmdOutputErr("git", "merge-base", commit1, commit2))
+	if err != nil {
+		return noBase
+	}
+
+	switch {
+	case commit1 == base:
+		return behind
+	case commit2 == base:
+		return ahead
+	}
+
+	return needMerge
 }

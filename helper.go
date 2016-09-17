@@ -215,11 +215,44 @@ func requireCleanTree() {
 	}
 }
 
-func branchesContains(branches []*Branch, name string) bool {
-	for _, b := range branches {
-		if b.Name == name {
-			return true
-		}
+// requireBranch dies if the requested branch doesn't exist
+func requireBranch(branch *Branch) {
+	if !contains(LocalBranches(), branch.PrefixedName()) {
+		dief("Branch '%s' does not exist and is required",
+			branch.PrefixedName())
 	}
-	return false
+}
+
+func requireBranchAbsent(branch *Branch) {
+	if contains(LocalBranches(), branch.PrefixedName()) {
+		dief("Branch '%s' already exists. Pick another name",
+			branch.PrefixedName())
+	}
+}
+
+func requireEqual(local, remote string) {
+	stat := compareBranches(local, remote)
+	if stat == equal {
+		return
+	}
+
+	printf("Branches '%s' and '%s' have divereged.", local, remote)
+
+	switch stat {
+	case behind:
+		dief("And branch '%s' may be fast-forwarded.", local)
+	case ahead:
+		// Not super bad, so just warn and move on
+		printf("And local branch '%s' is ahead of '%s'.", local, remote)
+	default:
+		dief("Branches need merging first.")
+	}
+}
+
+// RequireDripInitialized will die if the repo hasn't be initialized
+func RequireDripInitialized() {
+	if !DripInitialized() {
+		dief("fatal: Not a git-drip enabled repo yet. Please run " +
+			"\"git drip init\" first.")
+	}
 }

@@ -34,7 +34,7 @@ func getDevelopSuggestion(force bool) (string, bool) {
 		}
 		shouldCheck = true
 		suggestion = Config().Get(dripMaster)
-		if suggestion == "" || !branchesContains(branches, suggestion) {
+		if suggestion == "" || !contains(branches, suggestion) {
 			suggestion = "master"
 		}
 	}
@@ -64,7 +64,7 @@ func configureDevelop(force, defaults bool) string {
 	}
 
 	// check existence in case of an already existing repo
-	if shouldCheck && !branchesContains(LocalBranches(), masterBranch) {
+	if shouldCheck && !contains(LocalBranches(), masterBranch) {
 		dief("Local branch '%s' does not exist.", masterBranch)
 	}
 

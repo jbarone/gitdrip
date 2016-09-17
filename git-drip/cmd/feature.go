@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/jbarone/gitdrip"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -35,7 +36,8 @@ var featureCmd = &cobra.Command{
 	Long:  `Manage your feature branches`,
 	Run:   ListFeatures,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		requireDripInit()
+		cmd.Parent().PersistentPreRun(cmd.Parent(), args)
+		gitdrip.RequireDripInitialized()
 	},
 }
 
@@ -300,56 +302,7 @@ func finishFeatureCleanup(branch *Branch, origin, master string,
 // ListFeatures displays the feature branches for the repo
 func ListFeatures(cmd *cobra.Command, args []string) {
 	descriptions := viper.GetBool("descriptions")
-	// descriptions, _ := cmd.Flags().GetBool("descriptions") // #nosec
-
-	var config = GitConfig()
-	var prefix = config["gitdrip.prefix.feature"]
-	var masterBranch = config["gitdrip.branch.master"]
-	var featureBranches = PrefixedBranches(prefix)
-	var currentBranch = CurrentBranch()
-
-	if len(featureBranches) == 0 {
-		fmt.Fprintln(stderr(), "No feature branches exists.")
-		fmt.Fprintln(stderr(), "")
-		fmt.Fprintln(stderr(), "You can start a new feature branch:")
-		fmt.Fprintln(stderr(), "")
-		fmt.Fprintln(stderr(), "    git drip feature start <name> [<base>]")
-		fmt.Fprintln(stderr(), "")
-		return
-	}
-
-	width := getBranchNameWidth(featureBranches) + 3
-
-	for _, b := range featureBranches {
-		if b.FullName() == currentBranch.Name {
-			fmt.Fprintf(stdout(), "* ")
-		} else {
-			fmt.Fprintf(stdout(), "  ")
-		}
-
-		var description, extra string
-		if descriptions || *verbose > 0 {
-			description = trim(cmdOutput("git", "config",
-				"branch."+b.FullName()+".description")) + " "
-		}
-
-		if *verbose > 0 {
-			base := cmdOutput("git", "merge-base", b.FullName(), masterBranch)
-			developSha := cmdOutput("git", "rev-parse", masterBranch)
-			branchSha := cmdOutput("git", "rev-parse", b.FullName())
-			extra = "(may be rebased)"
-			switch {
-			case branchSha == developSha:
-				extra = "(no commits yet)"
-			case base == branchSha:
-				extra = "(is behind develop, may ff)"
-			case base == developSha:
-				extra = "(based on latest develop)"
-			}
-		}
-		fmt.Fprintf(stdout(), fmt.Sprintf("%%-%ds%%s%%s\n", width),
-			b.Name, description, extra)
-	}
+	gitdrip.ListFeatures(descriptions)
 }
 
 // StartFeatures displays the feature branches for the repo
@@ -416,22 +369,14 @@ func StartFeatures(cmd *cobra.Command, args []string) {
 
 // DescribeFeature displays the feature branches for the repo
 func DescribeFeature(cmd *cobra.Command, args []string) {
-	branch := getFeatureBranchOrCurrent(args)
 	description, _ := cmd.Flags().GetString("message") // #nosec
 
-	if description != "" {
-		setConfiguration(
-			fmt.Sprintf("branch.%s.description", branch.FullName()),
-			description)
-	} else {
-		run("git", "branch", "--edit-description", branch.FullName())
+	brancharg := ""
+	if len(args) > 0 {
+		brancharg = args[0]
 	}
 
-	// print summary
-	fmt.Fprintln(stdout(), "\nSummary of actions:")
-	fmt.Fprintf(stdout(),
-		"\n- The local branch '%s' had description edited\n\n",
-		branch.FullName())
+	gitdrip.DescribeFeature(brancharg, description)
 }
 
 // DeleteFeature ...
@@ -439,25 +384,9 @@ func DeleteFeature(cmd *cobra.Command, args []string) {
 	if len(args) == 0 {
 		dief("Missing argument <name|nameprefix>")
 	}
-	branch := getFeatureBranch(featurePrefix(), args[0])
-	config := GitConfig()
-	master := config["gitdrip.branch.master"]
-	RequireBranch(branch)
-	RequireCleanTree()
-
-	run("git", "checkout", master)
-
 	remote, _ := cmd.Flags().GetBool("remote") // #nosec
-	if remote {
-		run("git", "push", origin(config), ":refs/heads/"+branch.FullName())
-	}
 
-	run("git", "branch", "-d", branch.FullName())
-
-	fmt.Fprintln(stdout(), "\nSummary of actions:")
-	fmt.Fprintf(stdout(), "- Feature branch '%s' has been removed\n",
-		branch.FullName())
-	fmt.Fprintf(stdout(), "- You are now on branch '%s'\n\n", master)
+	gitdrip.DeleteFeature(args[0], remote)
 }
 
 func featureResolveMerge(branch *Branch, path, master string,
@@ -558,46 +487,26 @@ func CheckoutFeature(cmd *cobra.Command, args []string) {
 	if len(args) == 0 {
 		dief("Name a feature branch explicitly.")
 	}
-	branch := getFeatureBranch(featurePrefix(), args[0])
-	run("git", "checkout", branch.FullName())
+	gitdrip.CheckoutFeature(args[0])
 }
 
 // DiffFeature displays the diff date of the feature branch
 func DiffFeature(cmd *cobra.Command, args []string) {
+	brancharg := ""
 	if len(args) > 0 {
-		branch := getFeatureBranch(featurePrefix(), args[0])
-		base := trim(cmdOutput("git", "merge-base",
-			GitConfig()["gitdrip.branch.master"], branch.FullName()))
-		run("git", "diff", fmt.Sprintf("%s..%s", base, branch.FullName()))
-		return
+		brancharg = args[0]
 	}
-
-	branch := getCurrentBranch(featurePrefix())
-	if branch == nil {
-		dief("Not on a feature branch. Name one explicitly.")
-	}
-	base := trim(cmdOutput("git", "merge-base",
-		GitConfig()["gitdrip.branch.master"], "HEAD"))
-	run("git", "diff", base)
+	gitdrip.DiffFeature(brancharg)
 }
 
 // RebaseFeature rebases the feature branch on master
 func RebaseFeature(cmd *cobra.Command, args []string) {
-	branch := getFeatureBranchOrCurrent(args)
-
-	interactive, _ := cmd.Flags().GetBool("interactive") // #nosec
-	var opts string
-	if interactive {
-		opts = "-i"
+	brancharg := ""
+	if len(args) > 0 {
+		brancharg = args[0]
 	}
-
-	printf("Will try to rebase '%s'", branch.Name)
-
-	RequireCleanTree()
-	RequireBranch(branch)
-
-	run("git", "checkout", "-q", branch.FullName())
-	run("git", "rebase", opts, GitConfig()["gitdrip.branch.master"])
+	interactive, _ := cmd.Flags().GetBool("interactive") // #nosec
+	gitdrip.RebaseFeature(brancharg, interactive)
 }
 
 // PublishFeature ...

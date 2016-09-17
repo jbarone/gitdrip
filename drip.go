@@ -23,6 +23,7 @@ const (
 	dripRelease = "gitdrip.prefix.release"
 	dripHotfix  = "gitdrip.prefix.hotfix"
 	dripVersion = "gitdrip.prefix.versiontag"
+	dripOrigin  = "gitdrip.origin"
 )
 
 var prefixes []string
@@ -35,7 +36,7 @@ func DripBranchPrefixes() []string {
 			dripRelease,
 			dripHotfix,
 		} {
-			if p := Config().Get(prefix); p == "" {
+			if p := Config().Get(prefix); p != "" {
 				prefixes = append(prefixes, p)
 			}
 		}

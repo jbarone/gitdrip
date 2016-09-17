@@ -263,3 +263,26 @@ func testNoStderr(t *testing.T) {
 		t.Fatalf("unexpected stderr:\n%s", testStderr)
 	}
 }
+
+func testCleanup(t *testing.T, canDie bool) {
+	runLog = runLogTrap
+	testStdout = stdoutTrap
+	testStderr = stderrTrap
+
+	dieTrap = nil
+	runLogTrap = nil
+	stdoutTrap = nil
+	stderrTrap = nil
+	if err := recover(); err != nil {
+		if died && canDie {
+			return
+		}
+		var msg string
+		if died {
+			msg = "died"
+		} else {
+			msg = fmt.Sprintf("panic: %v", err)
+		}
+		t.Fatalf("%s\nstdout:\n%sstderr:\n%s", msg, testStdout, testStderr)
+	}
+}

@@ -14,7 +14,6 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with git-drip. If not, see <http://www.gnu.org/licenses/>.
-//
 
 package gitdrip
 
@@ -23,8 +22,14 @@ import (
 	"testing"
 )
 
-func testVersion(t *testing.T) {
-	defer testCleanup(t, false)
+func testFeature(t *testing.T, canDie, descriptions bool) {
+	// reset git vars
+	gitconfig = nil
+	gitdir = ""
+	gitroot = ""
+	prefixes = []string{}
+
+	defer testCleanup(t, canDie)
 
 	dieTrap = func() {
 		died = true
@@ -35,10 +40,15 @@ func testVersion(t *testing.T) {
 	stdoutTrap = new(bytes.Buffer)
 	stderrTrap = new(bytes.Buffer)
 
-	PrintVersion()
+	RequireDripInitialized()
+	ListFeatures(descriptions)
 }
 
-func TestPrintVersion(t *testing.T) {
-	testVersion(t)
-	testPrintedStdout(t, "0.3.2")
+func TestFeatureInitRequire(t *testing.T) {
+	gt := newGitTest(t)
+	defer gt.done()
+
+	testFeature(t, true, false)
+	testPrintedStderr(t, "fatal: Not a git-drip enabled repo yet. "+
+		"Please run \"git drip init\" first.\n")
 }
