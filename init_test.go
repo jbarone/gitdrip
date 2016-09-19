@@ -18,27 +18,10 @@
 
 package gitdrip
 
-import (
-	"bytes"
-	"testing"
-)
+import "testing"
 
 func testInit(t *testing.T, canDie, force, defaults bool) {
-	// reset git vars
-	gitconfig = nil
-	gitdir = ""
-	gitroot = ""
-
-	defer testCleanup(t, canDie)
-
-	dieTrap = func() {
-		died = true
-		panic("died")
-	}
-	died = false
-	runLogTrap = []string{} // non-nil, to trigger saving of commands
-	stdoutTrap = new(bytes.Buffer)
-	stderrTrap = new(bytes.Buffer)
+	defer testSetup(t)(canDie)
 
 	InitDrip(force, defaults)
 }

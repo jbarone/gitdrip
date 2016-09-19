@@ -264,25 +264,45 @@ func testNoStderr(t *testing.T) {
 	}
 }
 
-func testCleanup(t *testing.T, canDie bool) {
-	runLog = runLogTrap
-	testStdout = stdoutTrap
-	testStderr = stderrTrap
+func testSetup(t *testing.T) func(bool) {
+	gitconfig = nil
+	gitdir = ""
+	gitroot = ""
+	prefixes = []string{}
 
-	dieTrap = nil
-	runLogTrap = nil
-	stdoutTrap = nil
-	stderrTrap = nil
-	if err := recover(); err != nil {
-		if died && canDie {
-			return
+	dieTrap = func() {
+		died = true
+		panic("died")
+	}
+	died = false
+	runLogTrap = []string{} // non-nil, to trigger saving of commands
+	stdoutTrap = new(bytes.Buffer)
+	stderrTrap = new(bytes.Buffer)
+
+	return func(canDie bool) {
+		runLog = runLogTrap
+		testStdout = stdoutTrap
+		testStderr = stderrTrap
+
+		dieTrap = nil
+		runLogTrap = nil
+		stdoutTrap = nil
+		stderrTrap = nil
+		gitconfig = nil
+		gitdir = ""
+		gitroot = ""
+		prefixes = []string{}
+		if err := recover(); err != nil {
+			if died && canDie {
+				return
+			}
+			var msg string
+			if died {
+				msg = "died"
+			} else {
+				msg = fmt.Sprintf("panic: %v", err)
+			}
+			t.Fatalf("%s\nstdout:\n%sstderr:\n%s", msg, testStdout, testStderr)
 		}
-		var msg string
-		if died {
-			msg = "died"
-		} else {
-			msg = fmt.Sprintf("panic: %v", err)
-		}
-		t.Fatalf("%s\nstdout:\n%sstderr:\n%s", msg, testStdout, testStderr)
 	}
 }

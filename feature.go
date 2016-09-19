@@ -396,3 +396,29 @@ func FinishFeature(brancharg string, remote, keep, squash, rebase bool) {
 
 	finishFeatureCleanup(branch, master, origin(), remote, keep)
 }
+
+// PublishFeature ...
+func PublishFeature() {
+}
+
+// TrackFeature ...
+func TrackFeature(brancharg string) {
+	if brancharg == "" {
+		dief("Missing argument <name>")
+	}
+	requireCleanTree()
+
+	branch := &Branch{Name: brancharg, Prefix: Config().Get(dripFeature)}
+	requireBranchAbsent(branch)
+
+	run("git", "fetch", "-q", origin())
+
+	remote := &Branch{Name: origin() + "/" + branch.PrefixedName()}
+	requireBranch(remote)
+
+	run("git", "checkout", "-b", brancharg, remote.Name)
+}
+
+// PullFeature ...
+func PullFeature() {
+}

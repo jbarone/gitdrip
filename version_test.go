@@ -18,22 +18,10 @@
 
 package gitdrip
 
-import (
-	"bytes"
-	"testing"
-)
+import "testing"
 
 func testVersion(t *testing.T) {
-	defer testCleanup(t, false)
-
-	dieTrap = func() {
-		died = true
-		panic("died")
-	}
-	died = false
-	runLogTrap = []string{} // non-nil, to trigger saving of commands
-	stdoutTrap = new(bytes.Buffer)
-	stderrTrap = new(bytes.Buffer)
+	defer testSetup(t)(false)
 
 	PrintVersion()
 }

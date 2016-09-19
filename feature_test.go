@@ -17,28 +17,10 @@
 
 package gitdrip
 
-import (
-	"bytes"
-	"testing"
-)
+import "testing"
 
 func testFeature(t *testing.T, canDie, descriptions bool) {
-	// reset git vars
-	gitconfig = nil
-	gitdir = ""
-	gitroot = ""
-	prefixes = []string{}
-
-	defer testCleanup(t, canDie)
-
-	dieTrap = func() {
-		died = true
-		panic("died")
-	}
-	died = false
-	runLogTrap = []string{} // non-nil, to trigger saving of commands
-	stdoutTrap = new(bytes.Buffer)
-	stderrTrap = new(bytes.Buffer)
+	defer testSetup(t)(canDie)
 
 	RequireDripInitialized()
 	ListFeatures(descriptions)
