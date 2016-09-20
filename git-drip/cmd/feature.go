@@ -289,8 +289,21 @@ func PublishFeature(cmd *cobra.Command, args []string) {
 
 // TrackFeature ...
 func TrackFeature(cmd *cobra.Command, args []string) {
+	if len(args) == 0 {
+		dief("Name a feature branch explicitly.")
+	}
+	gitdrip.TrackFeature(args[0])
 }
 
 // PullFeature ...
 func PullFeature(cmd *cobra.Command, args []string) {
+	if len(args) == 0 {
+		dief("Name a remote explicitly.")
+	}
+	brancharg := ""
+	if len(args) > 1 {
+		brancharg = args[1]
+	}
+
+	gitdrip.PullFeature(args[0], brancharg)
 }

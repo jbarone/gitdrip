@@ -55,7 +55,7 @@ func getFeatureBranch(name string) *Branch {
 
 	switch len(matches) {
 	case 0:
-		dief("No branch matches prefix " + branch.Name)
+		dief("No branch matches prefix " + branch.PrefixedName())
 	case 1:
 		return matches[0]
 	default:
@@ -72,6 +72,23 @@ func getFeatureBranch(name string) *Branch {
 func getFeatureBranchOrCurrent(arg string) *Branch {
 	if arg != "" {
 		return getFeatureBranch(arg)
+	}
+
+	branch := CurrentBranch()
+	if branch == nil || branch.Prefix != Config().Get(dripFeature) {
+		dief("The current HEAD is not a feature branch.\n" +
+			"Please specify a <name> argument")
+	}
+
+	return branch
+}
+
+func getFeatureBranchNameOrCurrent(arg string) *Branch {
+	if arg != "" {
+		return &Branch{
+			Name:   arg,
+			Prefix: Config().Get(dripFeature),
+		}
 	}
 
 	branch := CurrentBranch()
@@ -148,7 +165,8 @@ func ListFeatures(descriptions bool) {
 	var currentBranch = CurrentBranch()
 
 	if len(featureBranches) == 0 {
-		fmt.Fprintln(stderr(), dedent.Dedent(`No feature branches exists.
+		fmt.Fprintln(stderr(), dedent.Dedent(`
+		No feature branches exists.
 
 		You can start a new feature branch:
 
@@ -259,7 +277,7 @@ func StartFeatures(branchname, basearg, message string, fetch, describe bool) {
 		- You are now on branch '%s'
 
 		Now, start committing on your feature. When done, use:
-			 git drip feature finish %s
+		    git drip feature finish %s
 
 		`),
 		branch.PrefixedName(),
@@ -384,8 +402,8 @@ func FinishFeature(brancharg string, remote, keep, squash, rebase bool) {
 		_ = ioutil.WriteFile(path, []byte(master), 0644) // #nosec
 		fmt.Fprintln(stdout(), dedent.Dedent(`
 			There were merge conflicts. To resolve the merge conflict manually, use:
-				git mergetool
-				git commit
+			    git mergetool
+			    git commit
 
 			You can then complete the finish by running it again:
 			    git drip feature finish %s
@@ -441,6 +459,61 @@ func TrackFeature(brancharg string) {
 	run("git", "checkout", "-b", brancharg, remote.Name)
 }
 
+func avoidCrossBranchAction(current, branch *Branch) {
+	if current.PrefixedName() != branch.PrefixedName() {
+		fmt.Fprintf(stderr(), dedent.Dedent(`
+			Trying to pull from '%s' while currently on branch '%s'.
+			To avoid unintende merges, git-drip aborted.`),
+			branch.PrefixedName(),
+			current.PrefixedName(),
+		)
+	}
+}
+
 // PullFeature ...
-func PullFeature() {
+func PullFeature(remote, brancharg string) {
+	if remote == "" {
+		dief("Missing argument <remote>")
+	}
+
+	branch := getFeatureBranchNameOrCurrent(brancharg)
+	current := CurrentBranch()
+
+	if current.Prefix == Config().Get(dripFeature) {
+		avoidCrossBranchAction(current, branch)
+	}
+
+	requireCleanTree()
+
+	if contains(LocalBranches(), branch.PrefixedName()) {
+		avoidCrossBranchAction(current, branch)
+
+		err := runErr("git", "pull", "-q", remote, branch.PrefixedName())
+		if err != nil {
+			dief("Failed to pull from remote '%s'", remote)
+		}
+
+		fmt.Fprintf(stdout(), "Pulled %s's changes into %s\n",
+			remote, branch.PrefixedName())
+		return
+	}
+
+	err := runErr("git", "fetch", "-q", remote, branch.PrefixedName())
+	if err != nil {
+		dief("Fetch failed.")
+	}
+	err = runErr("git", "branch", "--no-track", branch.PrefixedName(), "FETCH_HEAD")
+	if err != nil {
+		dief("Branch failed.")
+	}
+	err = runErr("git", "checkout", "-q", branch.PrefixedName())
+	if err != nil {
+		dief("Checkout out new local branch failed.")
+	}
+
+	fmt.Fprintf(stdout(),
+		"Created local branch %s based on %s's changes into %s\n",
+		branch.PrefixedName(),
+		remote,
+		branch.PrefixedName())
 }
