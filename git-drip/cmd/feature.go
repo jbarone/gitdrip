@@ -280,6 +280,11 @@ func RebaseFeature(cmd *cobra.Command, args []string) {
 
 // PublishFeature ...
 func PublishFeature(cmd *cobra.Command, args []string) {
+	brancharg := ""
+	if len(args) > 0 {
+		brancharg = args[0]
+	}
+	gitdrip.PublishFeature(brancharg)
 }
 
 // TrackFeature ...

@@ -398,7 +398,29 @@ func FinishFeature(brancharg string, remote, keep, squash, rebase bool) {
 }
 
 // PublishFeature ...
-func PublishFeature() {
+func PublishFeature(brancharg string) {
+	branch := getFeatureBranchOrCurrent(brancharg)
+	requireCleanTree()
+	requireBranch(branch)
+	run("git", "fetch", "-q", origin())
+	remote := &Branch{Name: origin() + "/" + branch.PrefixedName()}
+	requireBranchAbsent(remote)
+
+	// create remote branch
+	run("git", "push", origin(), branch.PrefixedName()+":"+branch.FullName())
+	run("git", "fetch", "-q", origin())
+
+	// configure remote tracking
+	Config().Set(fmt.Sprintf("branch.%s.remote", branch.PrefixedName()), origin())
+	Config().Set(fmt.Sprintf("branch.%s.merge", branch.PrefixedName()), branch.FullName())
+	run("git", "checkout", branch.PrefixedName())
+
+	fmt.Fprintf(stdout(), dedent.Dedent(`
+	Summary of actions:
+	- A new remote branch '%s' was created
+	- The local branch '%s' was configured to track the remote branch
+	- You are now on branch '%s'
+	`), branch.PrefixedName(), branch.PrefixedName(), branch.PrefixedName())
 }
 
 // TrackFeature ...
