@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // HEAD is the name of the HEAD branch
@@ -31,7 +32,8 @@ const HEAD = "HEAD"
 
 // GitConfig stores the current state of git configuration
 type GitConfig struct {
-	cfg map[string]string
+	cfg  map[string]string
+	once sync.Once
 }
 
 var (
@@ -44,6 +46,8 @@ var (
 func Config() *GitConfig {
 	if gitconfig == nil {
 		gitconfig = &GitConfig{}
+	}
+	gitconfig.once.Do(func() {
 		gitconfig.cfg = make(map[string]string)
 
 		lines := nonBlankLines(cmdOutput("git", "config", "--list"))
@@ -56,7 +60,7 @@ func Config() *GitConfig {
 				gitconfig.cfg[parts[0]] = strings.Join(parts[1:], "=")
 			}
 		}
-	}
+	})
 	return gitconfig
 }
 

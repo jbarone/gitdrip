@@ -25,6 +25,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/renstrom/dedent"
 )
 
 var verbose int
@@ -273,4 +275,97 @@ func origin() string {
 		return Config().Get(dripOrigin)
 	}
 	return "origin"
+}
+
+func getBranch(prefix, name string) *Branch {
+	branch := &Branch{
+		Name:   name,
+		Prefix: prefix,
+	}
+	branches := PrefixedBranches(prefix)
+	if contains(branches, branch.PrefixedName()) {
+		return branch
+	}
+
+	var matches []*Branch
+	for _, b := range branches {
+		if strings.HasPrefix(b.PrefixedName(), branch.PrefixedName()) {
+			matches = append(matches, b)
+		}
+	}
+
+	switch len(matches) {
+	case 0:
+		dief("No branch matches prefix " + branch.PrefixedName())
+	case 1:
+		return matches[0]
+	default:
+		fmt.Fprintf(stderr(), "Multiple branches match prefix '%s':",
+			branch.Name)
+		for _, m := range matches {
+			fmt.Fprintln(stderr(), "-", m.FullName())
+		}
+		die()
+	}
+	return nil
+}
+
+func getBranchOrCurrent(prefix, arg string) *Branch {
+	if arg != "" {
+		return getBranch(prefix, arg)
+	}
+
+	branch := CurrentBranch()
+	if branch == nil || branch.Prefix != prefix {
+		dief("The current HEAD is not a feature branch.\n" +
+			"Please specify a <name> argument")
+	}
+
+	return branch
+}
+
+func describeBranch(prefix, brancharg, description string) {
+	branch := getBranchOrCurrent(prefix, brancharg)
+
+	if description != "" {
+		Config().Set(
+			fmt.Sprintf("branch.%s.description", branch.PrefixedName()),
+			description)
+	} else {
+		run("git", "branch", "--edit-description", branch.PrefixedName())
+	}
+
+	// print summary
+	fmt.Fprintf(stdout(), dedent.Dedent(`
+	Summary of actions:
+
+	- The local branch '%s' had description edited
+
+	`), branch.PrefixedName())
+}
+
+func getBranchNameWidth(branches []*Branch) (width int) {
+	for _, b := range branches {
+		if len(b.Name) > width {
+			width = len(b.Name)
+		}
+	}
+	return
+}
+
+func getBranchNameOrCurrent(prefix, arg string) *Branch {
+	if arg != "" {
+		return &Branch{
+			Name:   arg,
+			Prefix: prefix,
+		}
+	}
+
+	branch := CurrentBranch()
+	if branch == nil || branch.Prefix != prefix {
+		dief("The current HEAD is not a feature branch.\n" +
+			"Please specify a <name> argument")
+	}
+
+	return branch
 }

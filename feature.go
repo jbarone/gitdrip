@@ -22,83 +22,9 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/renstrom/dedent"
 )
-
-func getBranchNameWidth(branches []*Branch) (width int) {
-	for _, b := range branches {
-		if len(b.Name) > width {
-			width = len(b.Name)
-		}
-	}
-	return
-}
-
-func getFeatureBranch(name string) *Branch {
-	branch := &Branch{
-		Name:   name,
-		Prefix: Config().Get(dripFeature),
-	}
-	branches := PrefixedBranches(Config().Get(dripFeature))
-	if contains(branches, branch.PrefixedName()) {
-		return branch
-	}
-
-	var matches []*Branch
-	for _, b := range branches {
-		if strings.HasPrefix(b.PrefixedName(), branch.PrefixedName()) {
-			matches = append(matches, b)
-		}
-	}
-
-	switch len(matches) {
-	case 0:
-		dief("No branch matches prefix " + branch.PrefixedName())
-	case 1:
-		return matches[0]
-	default:
-		fmt.Fprintf(stderr(), "Multiple branches match prefix '%s':",
-			branch.Name)
-		for _, m := range matches {
-			fmt.Fprintln(stderr(), "-", m.FullName())
-		}
-		die()
-	}
-	return nil
-}
-
-func getFeatureBranchOrCurrent(arg string) *Branch {
-	if arg != "" {
-		return getFeatureBranch(arg)
-	}
-
-	branch := CurrentBranch()
-	if branch == nil || branch.Prefix != Config().Get(dripFeature) {
-		dief("The current HEAD is not a feature branch.\n" +
-			"Please specify a <name> argument")
-	}
-
-	return branch
-}
-
-func getFeatureBranchNameOrCurrent(arg string) *Branch {
-	if arg != "" {
-		return &Branch{
-			Name:   arg,
-			Prefix: Config().Get(dripFeature),
-		}
-	}
-
-	branch := CurrentBranch()
-	if branch == nil || branch.Prefix != Config().Get(dripFeature) {
-		dief("The current HEAD is not a feature branch.\n" +
-			"Please specify a <name> argument")
-	}
-
-	return branch
-}
 
 func finishFeatureCleanup(branch *Branch, master, origin string,
 	remote, keep bool) {
@@ -212,23 +138,7 @@ func ListFeatures(descriptions bool) {
 
 // DescribeFeature displays the feature branches for the repo
 func DescribeFeature(brancharg, description string) {
-	branch := getFeatureBranchOrCurrent(brancharg)
-
-	if description != "" {
-		Config().Set(
-			fmt.Sprintf("branch.%s.description", branch.PrefixedName()),
-			description)
-	} else {
-		run("git", "branch", "--edit-description", branch.PrefixedName())
-	}
-
-	// print summary
-	fmt.Fprintf(stdout(), dedent.Dedent(`
-	Summary of actions:
-
-	- The local branch '%s' had description edited
-
-	`), branch.PrefixedName())
+	describeBranch(Config().Get(dripFeature), brancharg, description)
 }
 
 // StartFeatures creates a new feature branch
@@ -288,7 +198,7 @@ func StartFeatures(branchname, basearg, message string, fetch, describe bool) {
 
 // DeleteFeature deletes a given feature branch
 func DeleteFeature(brancharg string, remote bool) {
-	branch := getFeatureBranch(brancharg)
+	branch := getBranch(Config().Get(dripFeature), brancharg)
 	master := Config().Get(dripMaster)
 	requireBranch(branch)
 	requireCleanTree()
@@ -311,13 +221,14 @@ func DeleteFeature(brancharg string, remote bool) {
 
 // CheckoutFeature checks out the specified feature branch
 func CheckoutFeature(brancharg string) {
-	run("git", "checkout", getFeatureBranch(brancharg).PrefixedName())
+	run("git", "checkout",
+		getBranch(Config().Get(dripFeature), brancharg).PrefixedName())
 }
 
 // DiffFeature displays the diff date of the feature branch
 func DiffFeature(brancharg string) {
 	if brancharg != "" {
-		branch := getFeatureBranch(brancharg)
+		branch := getBranch(Config().Get(dripFeature), brancharg)
 		base := trim(cmdOutput("git", "merge-base",
 			Config().Get(dripMaster), branch.PrefixedName()))
 		run("git", "diff", fmt.Sprintf("%s..%s", base, branch.PrefixedName()))
@@ -335,7 +246,7 @@ func DiffFeature(brancharg string) {
 
 // RebaseFeature rebases the feature branch on master
 func RebaseFeature(brancharg string, interactive bool) {
-	branch := getFeatureBranchOrCurrent(brancharg)
+	branch := getBranchOrCurrent(Config().Get(dripFeature), brancharg)
 	var opts string
 	if interactive {
 		opts = "-i"
@@ -352,7 +263,7 @@ func RebaseFeature(brancharg string, interactive bool) {
 
 // FinishFeature concludes the feature branch and merge it into master
 func FinishFeature(brancharg string, remote, keep, squash, rebase bool) {
-	branch := getFeatureBranchOrCurrent(brancharg)
+	branch := getBranchOrCurrent(Config().Get(dripFeature), brancharg)
 	requireBranch(branch)
 	master := Config().Get(dripMaster)
 
@@ -417,7 +328,7 @@ func FinishFeature(brancharg string, remote, keep, squash, rebase bool) {
 
 // PublishFeature ...
 func PublishFeature(brancharg string) {
-	branch := getFeatureBranchOrCurrent(brancharg)
+	branch := getBranchOrCurrent(Config().Get(dripFeature), brancharg)
 	requireCleanTree()
 	requireBranch(branch)
 	run("git", "fetch", "-q", origin())
@@ -476,7 +387,7 @@ func PullFeature(remote, brancharg string) {
 		dief("Missing argument <remote>")
 	}
 
-	branch := getFeatureBranchNameOrCurrent(brancharg)
+	branch := getBranchNameOrCurrent(Config().Get(dripFeature), brancharg)
 	current := CurrentBranch()
 
 	if current.Prefix == Config().Get(dripFeature) {

@@ -18,38 +18,50 @@
 package cmd
 
 import (
-	"fmt"
-
+	"github.com/jbarone/gitdrip"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 // hotfixCmd represents the hotfix command
 var hotfixCmd = &cobra.Command{
 	Use:   "hotfix",
 	Short: "Manage your hotfix branches",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		// TODO: Work your own magic here
-		fmt.Println("hotfix called")
+	Long:  "Manage your hotfix branches",
+	Run:   ListHotfixes,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		cmd.Parent().PersistentPreRun(cmd.Parent(), args)
+		gitdrip.RequireDripInitialized()
 	},
+}
+
+// hotfixListCmd represents the hotfix list command
+var hotfixListCmd = &cobra.Command{
+	Use:   "list [-d]",
+	Short: "List hotfix branches",
+	Long:  "List hotfix branches",
+	Run:   ListHotfixes,
 }
 
 func init() {
 	RootCmd.AddCommand(hotfixCmd)
 
-	// Here you will define your flags and configuration settings.
+	hotfixCmd.Flags().BoolP("descriptions", "d", false,
+		"Include branch descriptions")
+	_ = viper.BindPFlag("hotfix.descriptions",
+		hotfixCmd.Flags().Lookup("descriptions"))
 
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// hotfixCmd.PersistentFlags().String("foo", "", "A help for foo")
+	// list
+	hotfixCmd.AddCommand(hotfixListCmd)
+	hotfixListCmd.Flags().BoolP("descriptions", "d", false,
+		"Include branch descriptions")
+	_ = viper.BindPFlag("hotfix.descriptions",
+		hotfixListCmd.Flags().Lookup("descriptions"))
+	viper.SetDefault("hotfix.descriptions", false)
+}
 
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// hotfixCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-
+// ListHotfixes displays the feature branches for the repo
+func ListHotfixes(cmd *cobra.Command, args []string) {
+	descriptions := viper.GetBool("hotfix.descriptions")
+	gitdrip.ListHotfixes(descriptions)
 }
